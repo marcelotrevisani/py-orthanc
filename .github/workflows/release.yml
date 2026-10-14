@@ -1,7 +1,7 @@
 name: Release
 
-# Push a tag matching the Cargo.toml version (`git tag v0.1.0 && git push origin v0.1.0`),
-# or publish a release with that tag in the GitHub UI.
+# Push a tag matching the Cargo.toml version (`git tag v0.1.0 && git push origin v0.1.0`).
+# Publishing a release for an existing tag in the GitHub UI does not trigger this workflow.
 # Builds and tests on every platform, attaches the binaries to a GitHub
 # release (named as the in-app updater expects), then publishes to crates.io.
 on:
