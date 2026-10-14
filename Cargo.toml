@@ -1,0 +1,83 @@
+[package]
+# crates.io name (`orthanc` is taken); the binary is still `orthanc`.
+name = "py-orthanc"
+version = "0.1.0"
+description = "Python environment management desktop app"
+authors = ["trevisani"]
+license = "Apache-2.0"
+# In-app update checks look for releases here.
+repository = "https://github.com/marcelotrevisani/orthanc"
+edition = "2021"
+rust-version = "1.80"
+keywords = ["python", "uv", "virtualenv", "gui", "desktop"]
+categories = ["development-tools", "gui"]
+
+[lib]
+name = "orthanc_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "orthanc"
+path = "src/main.rs"
+
+[dependencies]
+# GUI framework
+iced = { version = "0.13", features = ["tokio", "canvas", "multi-window", "svg"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Git
+# Local repo access only (status, branch, ahead/behind); no network, so no
+# OpenSSL/libssh2 for the released binaries to depend on.
+git2 = { version = "0.19", default-features = false }
+
+# GitHub API
+octocrab = "0.44"
+
+# Async & HTTP
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+tokio = { version = "1", features = ["full"] }
+
+# Utilities
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+log = "0.4"
+env_logger = "0.11"
+dirs = "6"
+uuid = { version = "1", features = ["v4"] }
+rfd = "0.15"
+open = "5"
+
+# System tray — Linux uses ksni (pure D-Bus), others use tray-icon
+[target.'cfg(target_os = "linux")'.dependencies]
+ksni = { version = "0.3", features = ["blocking"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+tray-icon = { version = "0.21", default-features = false }
+
+[build-dependencies]
+winresource = "0.1"
+
+# Used by `cargo bundle` to build the macOS .app (.icns) and Linux .deb (.desktop + icons).
+[package.metadata.bundle]
+name = "Orthanc"
+identifier = "com.trevisani.orthanc"
+category = "public.app-category.developer-tools"
+short_description = "Python environment management desktop app"
+icon = [
+    "assets/icon-32.png",
+    "assets/icon-32@2x.png",
+    "assets/icon-128.png",
+    "assets/icon-128@2x.png",
+    "assets/icon-256.png",
+    "assets/icon-256@2x.png",
+    "assets/icon-512.png",
+    "assets/icon-512@2x.png",
+]
+
+[dev-dependencies]
+tempfile = "3"
+wiremock = "0.6"

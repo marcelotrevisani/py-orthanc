@@ -1,0 +1,100 @@
+name: Release
+
+# Push a tag matching the Cargo.toml version, e.g. `git tag v0.1.0 && git push origin v0.1.0`.
+# Builds and tests on every platform, attaches the binaries to a GitHub
+# release (named as the in-app updater expects), then publishes to crates.io.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-version:
+    name: Check tag matches Cargo.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match Cargo.toml version $version"
+            exit 1
+          fi
+
+  build:
+    name: Build ${{ matrix.asset }}
+    needs: check-version
+    strategy:
+      matrix:
+        include:
+          # Ubuntu 22.04 keeps the glibc requirement low (2.35) for older distros.
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, asset: orthanc-linux-x86_64 }
+          - { os: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu, asset: orthanc-linux-aarch64 }
+          - { os: macos-latest, target: aarch64-apple-darwin, asset: orthanc-darwin-aarch64 }
+          # Intel Mac binary, cross-compiled on the Apple Silicon runner (tests can't run).
+          - { os: macos-latest, target: x86_64-apple-darwin, asset: orthanc-darwin-x86_64, cross: true }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, asset: orthanc-windows-x86_64.exe }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Test
+        if: ${{ !matrix.cross }}
+        run: cargo test --locked --target ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Collect binary
+        shell: bash
+        run: |
+          src="target/${{ matrix.target }}/release/orthanc"
+          if [ "$RUNNER_OS" = "Windows" ]; then src="$src.exe"; fi
+          mkdir dist
+          cp "$src" "dist/${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/*
+          if-no-files-found: error
+
+  github-release:
+    name: Create GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum -- * > SHA256SUMS.txt
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
+
+  crates-io:
+    name: Publish to crates.io
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Publish
+        run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
