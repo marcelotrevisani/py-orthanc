@@ -1,6 +1,7 @@
 name: Release
 
-# Push a tag matching the Cargo.toml version, e.g. `git tag v0.1.0 && git push origin v0.1.0`.
+# Push a tag matching the Cargo.toml version (`git tag v0.1.0 && git push origin v0.1.0`).
+# Publishing a release for an existing tag in the GitHub UI does not trigger this workflow.
 # Builds and tests on every platform, attaches the binaries to a GitHub
 # release (named as the in-app updater expects), then publishes to crates.io.
 on:
@@ -80,11 +81,17 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+        # The release may already exist (made in the GitHub UI, which pushes
+        # the tag); then just attach the binaries and keep its notes.
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
 
   crates-io:
     name: Publish to crates.io
